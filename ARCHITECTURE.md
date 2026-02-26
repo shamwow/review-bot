@@ -13,6 +13,8 @@ review-bot/
 │   ├── poller.ts                     # Poll GitHub API every 60s for labeled PRs
 │   ├── config.ts                     # Env var loading/validation
 │   ├── logger.ts                     # Pino structured logger
+│   ├── shared/
+│   │   └── footer.ts                # makeFooter() — thread/review ID tag builder
 │   ├── github/
 │   │   ├── client.ts                # Octokit instance (PAT auth)
 │   │   ├── comments.ts             # Fetch existing PR comment threads
@@ -27,10 +29,19 @@ review-bot/
 │   │   ├── build-runner.ts          # Run build/test commands from CLAUDE.md / README.md
 │   │   ├── claude-code-runner.ts    # Invoke Claude Code CLI for each review pass
 │   │   └── result-parser.ts         # Parse Claude Code output into structured review data
+│   ├── writer/
+│   │   ├── types.ts                  # WriteResult interface
+│   │   ├── pipeline.ts              # Orchestrator: clone → merge → fix code → build → commit → push
+│   │   ├── result-parser.ts         # Parse Claude Code code-fix output
+│   │   ├── git-ops.ts               # hasChanges, commitAndPush, fetchBase, hasMergeConflicts, mergeBase
+│   │   ├── ci-monitor.ts            # checkCI() — single-shot CI status check (Check Runs + Commit Statuses)
+│   │   └── ci-handler.ts            # handleCIPending() — poller handler for bot-ci-pending PRs
 │   ├── prompts/
 │   │   ├── base.md                  # Shared preamble (output format, thread handling rules)
 │   │   ├── architecture-pass.md     # Pass 1: architecture + ARCHITECTURE.md review
-│   │   └── detailed-pass.md         # Pass 2: line-level code quality review
+│   │   ├── detailed-pass.md         # Pass 2: line-level code quality review
+│   │   ├── code-fix.md             # Code-fix pass: read reviews, make changes
+│   │   └── merge-conflict.md       # Merge conflict resolution pass
 │   └── guides/                       # Review guides shipped with service
 │       ├── IOS_CODE_REVIEW.md
 │       ├── ANDROID_CODE_REVIEW.md
@@ -43,7 +54,11 @@ review-bot/
 
 ## Key Design: Polling
 
-The bot polls GitHub's search API every **60 seconds** for open PRs with the `bot-review-needed` label. No webhooks, no public endpoint.
+The bot polls GitHub's search API every **60 seconds** for open PRs with the `bot-review-needed`, `bot-changes-needed`, or `bot-ci-pending` label. No webhooks, no public endpoint.
+
+- `bot-review-needed` PRs are routed to the **review pipeline** (existing two-pass review)
+- `bot-changes-needed` PRs are routed to the **write pipeline** (code-fix loop)
+- `bot-ci-pending` PRs are checked for **CI status** (lightweight — no Claude invocation)
 
 **Authentication**: GitHub Personal Access Token (PAT) via `@octokit/rest`.
 
@@ -176,9 +191,11 @@ Every bot comment (inline review comments, general comments, LGTM, build failure
 
 | Label | Meaning | Applied by |
 |---|---|---|
-| `bot-review-needed` | PR is ready for the review bot to examine | Code submitter bot |
-| `bot-changes-needed` | Review bot found issues; submitter must respond | Review bot |
+| `bot-review-needed` | PR is ready for the review bot to examine | Code submitter bot / CI handler |
+| `bot-changes-needed` | Review bot found issues; write bot picks it up | Review bot / CI handler |
+| `bot-ci-pending` | Code pushed, waiting for CI to pass | Write pipeline |
 | `human-review-needed` | Review bot approved; ready for human | Review bot |
+| `bot-human-intervention` | Max review cycles exceeded; needs human help | Write pipeline |
 
 ### Lifecycle
 
@@ -186,12 +203,12 @@ Every bot comment (inline review comments, general comments, LGTM, build failure
 Code submitter opens PR, adds `bot-review-needed`
   │
   ▼
-Poller finds PR → runs full pipeline:
+Poller finds PR → runs review pipeline:
   1. Clone PR branch into temp dir
   2. Run build + tests (from CLAUDE.md / README.md)
   │
   ├─ Build/tests fail:
-  │   Post failure comment, remove all labels, add `bot-changes-needed`
+  │   Post failure comment, add `bot-changes-needed`
   │
   └─ Build/tests pass:
       3. Pass 1: Claude Code architecture review
@@ -200,15 +217,93 @@ Poller finds PR → runs full pipeline:
       │
       ├─ Unresolved comments remain:
       │   Post new comments, reply to threads
-      │   Remove all labels, add `bot-changes-needed`
-      │
-      └─ No unresolved comments:
-          Reply "REVIEW BOT RESOLVED" on all open threads
-          Post "LGTM" review
-          Remove all labels, add `human-review-needed`
+      │   Add `bot-changes-needed`  ──────────────────────┐
+      │                                                    │
+      └─ No unresolved comments:                           │
+          Post "LGTM" review                               │
+          Add `human-review-needed`                        │
+                                                           ▼
+                                              Poller finds PR → runs write pipeline:
+                                                1. Check cycle limit
+                                                │
+                                                ├─ Limit reached:
+                                                │   Add `bot-human-intervention`, stop
+                                                │
+                                                └─ Under limit:
+                                                    2. Clone PR branch
+                                                    3. Fetch base + resolve merge conflicts
+                                                    4. Invoke Claude Code to fix code
+                                                    5. Run build + tests
+                                                    │
+                                                    ├─ Build fails or no changes:
+                                                    │   Post error, keep `bot-changes-needed`
+                                                    │
+                                                    └─ Build passes + changes:
+                                                        Commit, push, post thread replies
+                                                        Add `bot-ci-pending`
+                                                            │
+                                              Poller finds PR → CI handler:
+                                                ├─ CI passed:
+                                                │   Add `bot-review-needed` (loop back ↑)
+                                                │
+                                                ├─ CI failed / timed out:
+                                                │   Add `bot-changes-needed` (retry)
+                                                │
+                                                └─ CI pending:
+                                                    Do nothing (re-check next cycle)
 ```
 
 Adding any label **removes all other bot labels first**. Only one label is active at a time.
+
+## Key Design: Write Pipeline (Code-Fix Loop)
+
+The write pipeline (`src/writer/pipeline.ts`) complements the review pipeline by automatically fixing review comments. When the review pipeline applies `bot-changes-needed`, the poller routes the PR to the write pipeline.
+
+### Cycle limit
+
+The pipeline counts distinct `review::{uuid}` values in PR comments to determine how many review cycles have occurred. If this exceeds `MAX_REVIEW_CYCLES` (default 5), it applies `bot-human-intervention` and stops — preventing infinite fix loops.
+
+### Code-fix pass
+
+A single Claude Code session reads all unresolved review comments via GitHub MCP, makes code changes, and outputs JSON with `threads_addressed`, `build_passed`, and `summary`. The prompt (`code-fix.md`) instructs Claude to make minimal, focused changes and not commit/push.
+
+### Merge conflict resolution
+
+Before running the code-fix pass, the pipeline checks for merge conflicts with the base branch:
+
+1. `fetchBase()` fetches the latest base branch from origin
+2. `hasMergeConflicts()` performs a dry-run merge to detect conflicts
+3. If conflicts exist: `mergeBase()` starts a real merge (leaving conflict markers), then invokes Claude Code with `merge-conflict.md` to resolve them
+4. After resolution, the pipeline verifies no `<<<<<<<` markers remain and commits the merge
+
+Uses merge (not rebase) — safer, preserves history, no force-push needed.
+
+### Post-fix flow
+
+After Claude makes changes:
+1. The pipeline runs the project's build/test commands as a safety net
+2. If build passes: commits, pushes, posts replies to addressed threads, and swaps the label to `bot-ci-pending`
+3. If build fails or no changes: posts an error comment and keeps `bot-changes-needed`
+
+### CI status monitoring
+
+After the write pipeline pushes code, it applies `bot-ci-pending` instead of immediately requesting re-review. The poller picks up `bot-ci-pending` PRs and runs a lightweight CI check each cycle (no Claude invocation):
+
+- `checkCI()` in `ci-monitor.ts` fetches both GitHub Check Runs and Commit Statuses APIs in parallel
+- **CI passed** (or no CI configured) → swap to `bot-review-needed`
+- **CI failed** → post comment with failed check names/links, swap to `bot-changes-needed`
+- **CI pending** → check timeout (derived from head commit timestamp, not in-memory state). If over `CI_POLL_TIMEOUT_MS`, treat as timeout. Otherwise do nothing — re-check next cycle.
+
+This is **stateless** — if the process dies during `bot-ci-pending`, it re-reads the label on restart and resumes checking. Timeout is derived from the commit date, not when monitoring started.
+
+### Git operations
+
+`src/writer/git-ops.ts` provides:
+- `hasChanges` — checks `git status --porcelain`
+- `commitAndPush` — sets bot identity, adds all changes, commits, pushes
+- `fetchBase` — fetches the base branch from origin
+- `hasMergeConflicts` — dry-run merge to detect conflicts
+- `mergeBase` — performs the actual merge (may leave conflict markers)
 
 ## Key Design: Platform Detection
 

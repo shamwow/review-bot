@@ -37,15 +37,18 @@ Documents the project's architecture — module structure, data flow, layer boun
 
 ## Label-Driven Workflow
 
-The entire review cycle is driven by three GitHub labels. Only one label is active on a PR at a time.
+The entire review cycle is driven by four GitHub labels. Only one label is active on a PR at a time.
 
 | Label | Applied by | Meaning |
 |---|---|---|
-| `bot-review-needed` | Code submitter | PR is ready for review |
-| `bot-changes-needed` | Review bot | Issues found; submitter must respond |
+| `bot-review-needed` | Code submitter / Write bot | PR is ready for review |
+| `bot-changes-needed` | Review bot | Issues found; write bot picks it up automatically |
 | `human-review-needed` | Review bot | Bot approved; awaiting human review |
+| `bot-human-intervention` | Write bot | Max review cycles exceeded; needs human help |
 
 ### Lifecycle
+
+The review bot and write bot form an autonomous loop:
 
 ```
 1. Open PR against main
@@ -70,11 +73,20 @@ bot-changes-needed             │
     │           bot-changes-needed  human-review-needed
     │                    │
     ▼                    ▼
-Fix issues and address every review thread
-    │
-    ▼
-Add label: bot-review-needed  (triggers another cycle)
+   Write bot picks up the PR automatically
+         │
+    ┌────┴──────────────────────┐
+    │                           │
+    ▼                           ▼
+Cycle limit reached        Under limit
+    │                           │
+    ▼                      Fix code, build, push
+bot-human-intervention          │
+                                ▼
+                         bot-review-needed (loops back ↑)
 ```
+
+The write bot automatically addresses review comments, pushes fixes, and re-triggers review. After `MAX_REVIEW_CYCLES` (default 5) iterations, it applies `bot-human-intervention` and stops.
 
 ## What the Review Bot Checks
 

@@ -48,5 +48,6 @@ export interface PRInfo {
   repo: string;
   number: number;
   branch: string;
+  baseBranch: string;
   title: string;
 }

@@ -2,12 +2,18 @@ import { Octokit } from "@octokit/rest";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { runReviewPipeline } from "./review/pipeline.js";
+import { runWritePipeline } from "./writer/pipeline.js";
+import { handleCIPending } from "./writer/ci-handler.js";
 import type { PRInfo } from "./review/types.js";
 
 const processing = new Set<string>();
 
-async function pollOnce(octokit: Octokit): Promise<void> {
-  logger.debug("Polling for PRs with bot-review-needed label");
+async function pollForLabel(
+  octokit: Octokit,
+  label: string,
+  handler: (octokit: Octokit, pr: PRInfo) => Promise<void>,
+): Promise<void> {
+  logger.debug({ label }, "Polling for PRs with label");
 
   // List all repos the token has access to (owned + collaborator)
   const repos = await octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
@@ -15,14 +21,14 @@ async function pollOnce(octokit: Octokit): Promise<void> {
     per_page: 100,
   });
 
-  logger.debug({ repoCount: repos.length }, "Fetched accessible repos");
+  logger.debug({ repoCount: repos.length, label }, "Fetched accessible repos");
 
   for (const repo of repos) {
-    // List open issues/PRs with the bot-review-needed label
+    // List open issues/PRs with the label
     const issues = await octokit.rest.issues.listForRepo({
       owner: repo.owner.login,
       repo: repo.name,
-      labels: "bot-review-needed",
+      labels: label,
       state: "open",
       per_page: 30,
     });
@@ -48,14 +54,15 @@ async function pollOnce(octokit: Octokit): Promise<void> {
         repo: repo.name,
         number: item.number,
         branch: pr.head.ref,
+        baseBranch: pr.base.ref,
         title: pr.title,
       };
 
       processing.add(key);
-      logger.info({ pr: key, title: prInfo.title }, "Starting review pipeline");
+      logger.info({ pr: key, title: prInfo.title, label }, "Starting pipeline");
 
-      // Run pipeline without awaiting — allows concurrent reviews
-      runReviewPipeline(octokit, prInfo)
+      // Run pipeline without awaiting — allows concurrent processing
+      handler(octokit, prInfo)
         .catch((err) => {
           logger.error({ pr: key, err }, "Pipeline failed unexpectedly");
         })
@@ -64,6 +71,12 @@ async function pollOnce(octokit: Octokit): Promise<void> {
         });
     }
   }
+}
+
+async function pollOnce(octokit: Octokit): Promise<void> {
+  await pollForLabel(octokit, "bot-review-needed", runReviewPipeline);
+  await pollForLabel(octokit, "bot-changes-needed", runWritePipeline);
+  await pollForLabel(octokit, "bot-ci-pending", handleCIPending);
 }
 
 let intervalId: ReturnType<typeof setInterval> | null = null;

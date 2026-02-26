@@ -32,5 +32,10 @@ export const config = {
   REVIEW_TIMEOUT_MS: optionalNumericEnv("REVIEW_TIMEOUT_MS", 600_000),
   WORK_DIR: optionalEnv("WORK_DIR", "/tmp/review-bot"),
   TRANSCRIPT_DIR: optionalEnv("TRANSCRIPT_DIR", "/tmp/review-bot/transcripts"),
+  MAX_WRITE_TURNS: optionalNumericEnv("MAX_WRITE_TURNS", 50),
+  WRITE_TIMEOUT_MS: optionalNumericEnv("WRITE_TIMEOUT_MS", 900_000),
+  MAX_REVIEW_CYCLES: optionalNumericEnv("MAX_REVIEW_CYCLES", 5),
+  CI_POLL_TIMEOUT_MS: optionalNumericEnv("CI_POLL_TIMEOUT_MS", 600_000),
+  MERGE_CONFLICT_TIMEOUT_MS: optionalNumericEnv("MERGE_CONFLICT_TIMEOUT_MS", 300_000),
   LOG_LEVEL: optionalEnv("LOG_LEVEL", "info"),
 } as const;

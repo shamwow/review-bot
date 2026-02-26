@@ -13,7 +13,7 @@ interface RunClaudeCodeOptions {
   maxTurns: number;
   timeoutMs: number;
   reviewId: string;
-  pass: "architecture" | "detailed";
+  pass: string;
 }
 
 async function saveTranscript(

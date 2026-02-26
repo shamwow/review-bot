@@ -12,6 +12,7 @@ import {
   postResolvedReply,
   postGeneralComment,
 } from "../github/comments.js";
+import { makeFooter } from "../shared/footer.js";
 import { runBuildAndTests } from "./build-runner.js";
 import { runClaudeCode } from "./claude-code-runner.js";
 import { detectPlatform } from "./platform-detector.js";
@@ -108,13 +109,6 @@ function mergeResults(
     architecture_update_needed: archResult.architecture_update_needed,
     summary: summaryParts.join("\n\n") || "Review complete.",
   };
-}
-
-function makeFooter(threadId: string, reviewId?: string): string {
-  const tag = reviewId
-    ? `thread::${threadId} | review::${reviewId}`
-    : `thread::${threadId}`;
-  return `\n\n---\n<sub>${tag}</sub>`;
 }
 
 export async function runReviewPipeline(

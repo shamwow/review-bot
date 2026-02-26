@@ -3,7 +3,9 @@ import { Octokit } from "@octokit/rest";
 const BOT_LABELS = [
   "bot-review-needed",
   "bot-changes-needed",
+  "bot-ci-pending",
   "human-review-needed",
+  "bot-human-intervention",
 ];
 
 export async function setLabel(
