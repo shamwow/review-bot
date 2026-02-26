@@ -126,6 +126,7 @@ export async function runReviewPipeline(
   });
 
   let checkoutPath: string | undefined;
+  let reviewId: string | undefined;
 
   try {
     // 1. Clone PR branch
@@ -197,7 +198,7 @@ export async function runReviewPipeline(
     ].join("\n");
 
     // Generate a single review ID for this pipeline run
-    const reviewId = randomUUID();
+    reviewId = randomUUID();
     log.info({ reviewId }, "Generated review ID");
 
     // 5. Pass 1: Architecture review
@@ -361,7 +362,7 @@ export async function runReviewPipeline(
         pr.owner,
         pr.repo,
         pr.number,
-        `## Review Bot Error\n\nThe review pipeline encountered an error. Please check the bot logs.\n\n\`\`\`\n${String(err)}\n\`\`\`` + makeFooter(randomUUID()),
+        `## Review Bot Error\n\nThe review pipeline encountered an error. Please check the bot logs.\n\n\`\`\`\n${String(err)}\n\`\`\`` + makeFooter(randomUUID(), reviewId),
       );
       await setLabel(octokit, pr.owner, pr.repo, pr.number, "bot-changes-needed");
     } catch (postErr) {
