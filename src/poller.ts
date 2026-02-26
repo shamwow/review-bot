@@ -9,57 +9,60 @@ const processing = new Set<string>();
 async function pollOnce(octokit: Octokit): Promise<void> {
   logger.debug("Polling for PRs with bot-review-needed label");
 
-  const query = `is:pr is:open label:bot-review-needed org:${config.GITHUB_ORG}`;
-  const { data } = await octokit.rest.search.issuesAndPullRequests({
-    q: query,
-    per_page: 30,
+  // List all repos the token has access to (owned + collaborator)
+  const repos = await octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
+    affiliation: "owner,collaborator",
+    per_page: 100,
   });
 
-  logger.debug({ count: data.total_count }, "Found PRs");
+  logger.debug({ repoCount: repos.length }, "Fetched accessible repos");
 
-  for (const item of data.items) {
-    const key = `${item.repository_url}#${item.number}`;
-    if (processing.has(key)) {
-      logger.debug({ key }, "Skipping PR already being processed");
-      continue;
-    }
-
-    // Extract owner/repo from repository_url
-    // Format: https://api.github.com/repos/{owner}/{repo}
-    const repoMatch = item.repository_url.match(/repos\/([^/]+)\/([^/]+)$/);
-    if (!repoMatch) {
-      logger.warn({ url: item.repository_url }, "Could not parse repository URL");
-      continue;
-    }
-
-    const [, owner, repo] = repoMatch;
-
-    // Get the PR details to find the branch
-    const { data: pr } = await octokit.rest.pulls.get({
-      owner,
-      repo,
-      pull_number: item.number,
+  for (const repo of repos) {
+    // List open issues/PRs with the bot-review-needed label
+    const issues = await octokit.rest.issues.listForRepo({
+      owner: repo.owner.login,
+      repo: repo.name,
+      labels: "bot-review-needed",
+      state: "open",
+      per_page: 30,
     });
 
-    const prInfo: PRInfo = {
-      owner,
-      repo,
-      number: item.number,
-      branch: pr.head.ref,
-      title: pr.title,
-    };
+    // Filter to only pull requests (issues with pull_request field)
+    const prs = issues.data.filter((issue) => issue.pull_request);
 
-    processing.add(key);
-    logger.info({ pr: key, title: prInfo.title }, "Starting review pipeline");
+    for (const item of prs) {
+      const key = `${repo.owner.login}/${repo.name}#${item.number}`;
+      if (processing.has(key)) {
+        logger.debug({ key }, "Skipping PR already being processed");
+        continue;
+      }
 
-    // Run pipeline without awaiting — allows concurrent reviews
-    runReviewPipeline(octokit, prInfo)
-      .catch((err) => {
-        logger.error({ pr: key, err }, "Pipeline failed unexpectedly");
-      })
-      .finally(() => {
-        processing.delete(key);
+      const { data: pr } = await octokit.rest.pulls.get({
+        owner: repo.owner.login,
+        repo: repo.name,
+        pull_number: item.number,
       });
+
+      const prInfo: PRInfo = {
+        owner: repo.owner.login,
+        repo: repo.name,
+        number: item.number,
+        branch: pr.head.ref,
+        title: pr.title,
+      };
+
+      processing.add(key);
+      logger.info({ pr: key, title: prInfo.title }, "Starting review pipeline");
+
+      // Run pipeline without awaiting — allows concurrent reviews
+      runReviewPipeline(octokit, prInfo)
+        .catch((err) => {
+          logger.error({ pr: key, err }, "Pipeline failed unexpectedly");
+        })
+        .finally(() => {
+          processing.delete(key);
+        });
+    }
   }
 }
 
