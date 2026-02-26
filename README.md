@@ -60,6 +60,33 @@ All configuration is via environment variables (see `.env.example`):
 | `WORK_DIR` | No | `/tmp/review-bot` | Directory for cloning PR branches |
 | `LOG_LEVEL` | No | `info` | Log level (`debug`, `info`, `warn`, `error`) |
 
+## Debugging with Claude Code
+
+Since review-bot spawns `claude` CLI as a child process, you cannot run it directly from inside a Claude Code session (nested sessions are blocked). Use this workflow instead:
+
+1. Start review-bot in a **separate terminal** (not inside Claude Code):
+   ```bash
+   npm run dev
+   ```
+
+2. Open Claude Code in another terminal to make code changes. The `npm run dev` file watcher (`tsx watch`) will automatically restart the bot when source files change.
+
+3. After making changes, Claude Code should trigger a review cycle and wait for it to complete:
+   - Swap the label on the target PR:
+     ```bash
+     gh pr edit <number> --repo <owner>/<repo> \
+       --remove-label "bot-changes-needed" \
+       --add-label "bot-review-needed"
+     ```
+   - Poll the PR labels until `bot-review-needed` is replaced (the bot swaps it to `bot-changes-needed` or `human-review-needed` when done):
+     ```bash
+     while gh pr view <number> --repo <owner>/<repo> --json labels \
+       | jq -e '.labels[].name == "bot-review-needed"' > /dev/null 2>&1; do
+       sleep 10
+     done
+     ```
+   - Check the result by reading the latest PR comments and the final label.
+
 ## How it works
 
 The bot polls GitHub every 60 seconds for open PRs with the `bot-review-needed` label across all repos the token has access to. For each PR it finds:
