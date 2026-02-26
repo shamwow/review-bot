@@ -58,7 +58,7 @@ All configuration is via environment variables (see `.env.example`):
 | `POLL_INTERVAL_MS` | No | `60000` | Polling interval in milliseconds |
 | `REVIEW_TIMEOUT_MS` | No | `600000` | Timeout per Claude Code invocation |
 | `WORK_DIR` | No | `/tmp/review-bot` | Directory for cloning PR branches |
-| `TRANSCRIPT_DIR` | No | `/tmp/review-bot/transcripts` | Directory for Claude Code transcript logs |
+| `TRANSCRIPT_DIR` | No | `/tmp/review-bot/transcripts` | Directory for Claude Code transcripts (`{reviewId}-architecture.json`, `{reviewId}-detailed.json`) |
 | `LOG_LEVEL` | No | `info` | Log level (`debug`, `info`, `warn`, `error`) |
 
 ## Debugging with Claude Code
@@ -96,5 +96,7 @@ The bot polls GitHub every 60 seconds for open PRs with the `bot-review-needed` 
 2. Runs the project's build and test commands (from `CLAUDE.md` or `README.md`)
 3. If build/tests pass, runs two Claude Code review passes (architecture + detailed)
 4. Posts review comments and swaps labels (`bot-changes-needed` or `human-review-needed`)
+
+Every bot comment includes a `thread::{uuid}` tag in its footer for resolution tracking, plus a `review::{uuid}` tag linking it to the pipeline run that produced it.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for full design details and [CONTRIBUTING.md](CONTRIBUTING.md) for the LLM compatibility guide.

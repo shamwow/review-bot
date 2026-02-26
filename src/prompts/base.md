@@ -27,6 +27,13 @@ After your review, output a single JSON block:
 - If the justification is insufficient → set resolved: false with a clear explanation
 - You MUST respond to every unresolved thread — do not skip any
 
+### Thread IDs
+All bot comments contain a `thread::{uuid}` tag in their footer. When constructing `thread_responses`:
+- **Inline review comments** (PR review threads): use the GitHub `comment_id` (from MCP) as the `thread_id`
+- **General/non-inline comments** (issue comments posted by the bot): use the UUID from the `thread::` tag in the comment footer as the `thread_id`
+
+You must check both inline review threads AND general bot comments for unresolved threads. A general comment is unresolved if it has no "REVIEW BOT RESOLVED" reply referencing its thread ID.
+
 ## Review approach
 - Read the diff: `git diff main...HEAD`
 - Read ARCHITECTURE.md if it exists

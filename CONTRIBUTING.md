@@ -98,9 +98,9 @@ The bot runs two sequential review passes:
 
 ## Responding to Review Comments
 
-When the bot applies `bot-changes-needed`, it will have posted review comments on the PR. The submitting LLM **must**:
+When the bot applies `bot-changes-needed`, it will have posted review comments on the PR. Every bot comment (inline review comments and general comments alike) contains a `thread::{uuid}` tag in its footer for tracking purposes. The submitting LLM **must**:
 
-1. **Address every unresolved comment thread** — the bot tracks threads and will reject the PR if any are left unaddressed.
+1. **Address every unresolved comment thread** — the bot tracks both inline review threads and general comment threads via `thread::` tags, and will reject the PR if any are left unaddressed.
 
 2. For each thread, either:
    - **Fix the issue** in a new commit and reply to the thread explaining the fix, OR

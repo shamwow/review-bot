@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -109,8 +110,11 @@ function mergeResults(
   };
 }
 
-function reviewCycleFooter(archCycleId: string, detailCycleId: string): string {
-  return `\n\n---\n<sub>Review cycles: ${archCycleId}, ${detailCycleId}</sub>`;
+function makeFooter(threadId: string, reviewId?: string): string {
+  const tag = reviewId
+    ? `thread::${threadId} | review::${reviewId}`
+    : `thread::${threadId}`;
+  return `\n\n---\n<sub>${tag}</sub>`;
 }
 
 export async function runReviewPipeline(
@@ -147,7 +151,7 @@ export async function runReviewPipeline(
         pr.owner,
         pr.repo,
         pr.number,
-        `## Build/Test Failure\n\n\`\`\`\n${buildResult.output}\n\`\`\``,
+        `## Build/Test Failure\n\n\`\`\`\n${buildResult.output}\n\`\`\`` + makeFooter(randomUUID()),
       );
       await setLabel(octokit, pr.owner, pr.repo, pr.number, "bot-changes-needed");
       return;
@@ -172,7 +176,7 @@ export async function runReviewPipeline(
         pr.owner,
         pr.repo,
         pr.number,
-        "Could not detect project platform from changed files. Skipping review.",
+        "Could not detect project platform from changed files. Skipping review." + makeFooter(randomUUID()),
       );
       await setLabel(octokit, pr.owner, pr.repo, pr.number, "bot-changes-needed");
       return;
@@ -192,9 +196,13 @@ export async function runReviewPipeline(
       `Read the diff with: git diff origin/main...HEAD`,
     ].join("\n");
 
+    // Generate a single review ID for this pipeline run
+    const reviewId = randomUUID();
+    log.info({ reviewId }, "Generated review ID");
+
     // 5. Pass 1: Architecture review
     log.info("Running architecture review pass");
-    const { output: archRaw, reviewCycleId: archCycleId } = await runClaudeCode({
+    const archRaw = await runClaudeCode({
       checkoutPath,
       promptPath: archPromptPath,
       mcpConfigPath,
@@ -202,21 +210,22 @@ export async function runReviewPipeline(
       model: config.CLAUDE_MODEL,
       maxTurns: config.MAX_REVIEW_TURNS,
       timeoutMs: config.REVIEW_TIMEOUT_MS,
-      label: `architecture-${pr.owner}-${pr.repo}-${pr.number}`,
+      reviewId,
+      pass: "architecture",
     });
     const archResult = parseArchitectureResult(archRaw);
     log.info(
       {
         comments: archResult.architecture_comments.length,
         threads: archResult.thread_responses.length,
-        reviewCycleId: archCycleId,
+        reviewId,
       },
       "Architecture pass complete",
     );
 
     // 6. Pass 2: Detailed review
     log.info("Running detailed review pass");
-    const { output: detailRaw, reviewCycleId: detailCycleId } = await runClaudeCode({
+    const detailRaw = await runClaudeCode({
       checkoutPath,
       promptPath: detailPromptPath,
       mcpConfigPath,
@@ -224,14 +233,15 @@ export async function runReviewPipeline(
       model: config.CLAUDE_MODEL,
       maxTurns: config.MAX_REVIEW_TURNS,
       timeoutMs: config.REVIEW_TIMEOUT_MS,
-      label: `detailed-${pr.owner}-${pr.repo}-${pr.number}`,
+      reviewId,
+      pass: "detailed",
     });
     const detailResult = parseDetailedResult(detailRaw);
     log.info(
       {
         comments: detailResult.detail_comments.length,
         threads: detailResult.thread_responses.length,
-        reviewCycleId: detailCycleId,
+        reviewId,
       },
       "Detailed pass complete",
     );
@@ -239,12 +249,11 @@ export async function runReviewPipeline(
     // 7. Merge results
     const merged = mergeResults(archResult, detailResult);
 
-    const footer = reviewCycleFooter(archCycleId, detailCycleId);
-
     // 8. Post results
     // Post "REVIEW BOT RESOLVED" on resolved threads
     for (const tr of merged.thread_responses) {
       if (tr.resolved) {
+        const footer = makeFooter(randomUUID(), reviewId);
         try {
           await postResolvedReply(
             octokit,
@@ -254,8 +263,24 @@ export async function runReviewPipeline(
             Number(tr.thread_id),
             footer,
           );
-        } catch (err) {
-          log.warn({ threadId: tr.thread_id, err }, "Failed to post resolved reply");
+        } catch (err: any) {
+          if (err?.status === 404) {
+            // Not an inline review comment — fall back to general comment
+            log.info({ threadId: tr.thread_id }, "Inline reply 404, falling back to general comment");
+            try {
+              await postGeneralComment(
+                octokit,
+                pr.owner,
+                pr.repo,
+                pr.number,
+                `REVIEW BOT RESOLVED (thread::${tr.thread_id})${footer}`,
+              );
+            } catch (fallbackErr) {
+              log.warn({ threadId: tr.thread_id, err: fallbackErr }, "Failed to post resolved fallback comment");
+            }
+          } else {
+            log.warn({ threadId: tr.thread_id, err }, "Failed to post resolved reply");
+          }
         }
       }
     }
@@ -263,6 +288,7 @@ export async function runReviewPipeline(
     // Post feedback on unresolved threads
     for (const tr of merged.thread_responses) {
       if (!tr.resolved && tr.response) {
+        const footer = makeFooter(randomUUID(), reviewId);
         try {
           await octokit.rest.pulls.createReplyForReviewComment({
             owner: pr.owner,
@@ -281,7 +307,7 @@ export async function runReviewPipeline(
     if (merged.comments.length > 0) {
       const commentsWithFooter = merged.comments.map((c) => ({
         ...c,
-        body: c.body + footer,
+        body: c.body + makeFooter(randomUUID(), reviewId),
       }));
       await postReview(
         octokit,
@@ -289,7 +315,7 @@ export async function runReviewPipeline(
         pr.repo,
         pr.number,
         commentsWithFooter,
-        merged.summary + footer,
+        merged.summary + makeFooter(randomUUID(), reviewId),
       );
     }
 
@@ -300,7 +326,7 @@ export async function runReviewPipeline(
         pr.owner,
         pr.repo,
         pr.number,
-        `## ARCHITECTURE.md Update Needed\n\n${merged.architecture_update_needed.reason ?? "This PR changes the project architecture. Please update ARCHITECTURE.md."}${footer}`,
+        `## ARCHITECTURE.md Update Needed\n\n${merged.architecture_update_needed.reason ?? "This PR changes the project architecture. Please update ARCHITECTURE.md."}` + makeFooter(randomUUID(), reviewId),
       );
     }
 
@@ -319,7 +345,7 @@ export async function runReviewPipeline(
           pr.owner,
           pr.repo,
           pr.number,
-          `LGTM! All review comments have been addressed.${footer}`,
+          `LGTM! All review comments have been addressed.` + makeFooter(randomUUID(), reviewId),
         );
       }
       await setLabel(octokit, pr.owner, pr.repo, pr.number, "human-review-needed");
@@ -335,7 +361,7 @@ export async function runReviewPipeline(
         pr.owner,
         pr.repo,
         pr.number,
-        `## Review Bot Error\n\nThe review pipeline encountered an error. Please check the bot logs.\n\n\`\`\`\n${String(err)}\n\`\`\``,
+        `## Review Bot Error\n\nThe review pipeline encountered an error. Please check the bot logs.\n\n\`\`\`\n${String(err)}\n\`\`\`` + makeFooter(randomUUID()),
       );
       await setLabel(octokit, pr.owner, pr.repo, pr.number, "bot-changes-needed");
     } catch (postErr) {

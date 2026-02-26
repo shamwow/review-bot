@@ -157,6 +157,14 @@ High-level review focused on design and structure. Reads `ARCHITECTURE.md`, eval
 ### Pass 2: Detailed Line-Level Review
 Granular review focused on code quality. Runs the project's linter, reviews for correctness, performance, memory management, error handling, security, and testing gaps.
 
+### Shared Review ID
+
+A single `reviewId` (UUID) is generated per pipeline run and shared across both passes. Transcripts are saved as `{reviewId}-architecture.json` and `{reviewId}-detailed.json`. Every bot comment includes `review::{reviewId}` in its footer.
+
+### Thread IDs
+
+Every bot comment (inline review comments, general comments, LGTM, build failure, error, architecture update) includes a `thread::{uuid}` footer tag. This enables resolution tracking for all comment types — not just inline PR review threads. On subsequent reviews, Claude reads these tags to identify and respond to unresolved threads.
+
 ### Merging Results
 - Combine architecture + detail comments, deduplicate by file+line proximity
 - Merge thread responses — Pass 1 takes precedence on conflicts

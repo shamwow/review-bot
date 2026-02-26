@@ -12,26 +12,22 @@ interface RunClaudeCodeOptions {
   model: string;
   maxTurns: number;
   timeoutMs: number;
-  label: string;
-}
-
-interface RunClaudeCodeResult {
-  output: string;
-  reviewCycleId: string;
+  reviewId: string;
+  pass: "architecture" | "detailed";
 }
 
 async function saveTranscript(
-  reviewCycleId: string,
+  transcriptId: string,
   stdout: string,
   stderr: string,
 ): Promise<void> {
   const dir = config.TRANSCRIPT_DIR;
   await mkdir(dir, { recursive: true });
 
-  await writeFile(join(dir, `${reviewCycleId}.json`), stdout);
+  await writeFile(join(dir, `${transcriptId}.json`), stdout);
 
   if (stderr.length > 0) {
-    await writeFile(join(dir, `${reviewCycleId}.stderr.log`), stderr);
+    await writeFile(join(dir, `${transcriptId}.stderr.log`), stderr);
   }
 }
 
@@ -62,7 +58,7 @@ async function pruneTranscripts(keep: number = 30): Promise<void> {
 
 export function runClaudeCode(
   options: RunClaudeCodeOptions,
-): Promise<RunClaudeCodeResult> {
+): Promise<string> {
   const {
     checkoutPath,
     promptPath,
@@ -71,10 +67,11 @@ export function runClaudeCode(
     model,
     maxTurns,
     timeoutMs,
-    label,
+    reviewId,
+    pass,
   } = options;
 
-  const reviewCycleId = `${Date.now()}-${label}`;
+  const transcriptId = `${reviewId}-${pass}`;
 
   return new Promise((resolve, reject) => {
     const args = [
@@ -123,7 +120,7 @@ export function runClaudeCode(
 
     const timer = setTimeout(() => {
       child.kill("SIGTERM");
-      saveTranscript(reviewCycleId, stdout, stderr)
+      saveTranscript(transcriptId, stdout, stderr)
         .then(() => pruneTranscripts())
         .catch((e) => logger.warn({ err: e }, "Failed to save transcript on timeout"))
         .finally(() => {
@@ -135,12 +132,12 @@ export function runClaudeCode(
 
     child.on("close", (code) => {
       clearTimeout(timer);
-      saveTranscript(reviewCycleId, stdout, stderr)
+      saveTranscript(transcriptId, stdout, stderr)
         .then(() => pruneTranscripts())
         .catch((e) => logger.warn({ err: e }, "Failed to save transcript"))
         .then(() => {
           if (code === 0) {
-            resolve({ output: stdout, reviewCycleId });
+            resolve(stdout);
           } else {
             reject(
               new Error(

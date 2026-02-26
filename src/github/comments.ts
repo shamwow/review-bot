@@ -6,10 +6,10 @@ export async function postResolvedReply(
   repo: string,
   prNumber: number,
   commentId: number,
-  reviewCycleFooter?: string,
+  footer?: string,
 ): Promise<void> {
-  const body = reviewCycleFooter
-    ? `REVIEW BOT RESOLVED${reviewCycleFooter}`
+  const body = footer
+    ? `REVIEW BOT RESOLVED${footer}`
     : "REVIEW BOT RESOLVED";
   await octokit.rest.pulls.createReplyForReviewComment({
     owner,
