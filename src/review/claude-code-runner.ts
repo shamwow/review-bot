@@ -31,6 +31,7 @@ export function runClaudeCode(options: RunClaudeCodeOptions): Promise<string> {
       "--max-turns",
       String(maxTurns),
       "--thinking",
+      "enabled",
       "--append-system-prompt-file",
       promptPath,
       "--mcp-config",
@@ -42,6 +43,7 @@ export function runClaudeCode(options: RunClaudeCodeOptions): Promise<string> {
       cwd: checkoutPath,
       env: {
         ...process.env,
+        CLAUDECODE: "",
         ...(process.env.ANTHROPIC_API_KEY
           ? { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY }
           : {}),
