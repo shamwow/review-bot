@@ -109,6 +109,10 @@ function mergeResults(
   };
 }
 
+function reviewCycleFooter(archCycleId: string, detailCycleId: string): string {
+  return `\n\n---\n<sub>Review cycles: ${archCycleId}, ${detailCycleId}</sub>`;
+}
+
 export async function runReviewPipeline(
   octokit: Octokit,
   pr: PRInfo,
@@ -190,7 +194,7 @@ export async function runReviewPipeline(
 
     // 5. Pass 1: Architecture review
     log.info("Running architecture review pass");
-    const archRaw = await runClaudeCode({
+    const { output: archRaw, reviewCycleId: archCycleId } = await runClaudeCode({
       checkoutPath,
       promptPath: archPromptPath,
       mcpConfigPath,
@@ -198,19 +202,21 @@ export async function runReviewPipeline(
       model: config.CLAUDE_MODEL,
       maxTurns: config.MAX_REVIEW_TURNS,
       timeoutMs: config.REVIEW_TIMEOUT_MS,
+      label: `architecture-${pr.owner}-${pr.repo}-${pr.number}`,
     });
     const archResult = parseArchitectureResult(archRaw);
     log.info(
       {
         comments: archResult.architecture_comments.length,
         threads: archResult.thread_responses.length,
+        reviewCycleId: archCycleId,
       },
       "Architecture pass complete",
     );
 
     // 6. Pass 2: Detailed review
     log.info("Running detailed review pass");
-    const detailRaw = await runClaudeCode({
+    const { output: detailRaw, reviewCycleId: detailCycleId } = await runClaudeCode({
       checkoutPath,
       promptPath: detailPromptPath,
       mcpConfigPath,
@@ -218,18 +224,22 @@ export async function runReviewPipeline(
       model: config.CLAUDE_MODEL,
       maxTurns: config.MAX_REVIEW_TURNS,
       timeoutMs: config.REVIEW_TIMEOUT_MS,
+      label: `detailed-${pr.owner}-${pr.repo}-${pr.number}`,
     });
     const detailResult = parseDetailedResult(detailRaw);
     log.info(
       {
         comments: detailResult.detail_comments.length,
         threads: detailResult.thread_responses.length,
+        reviewCycleId: detailCycleId,
       },
       "Detailed pass complete",
     );
 
     // 7. Merge results
     const merged = mergeResults(archResult, detailResult);
+
+    const footer = reviewCycleFooter(archCycleId, detailCycleId);
 
     // 8. Post results
     // Post "REVIEW BOT RESOLVED" on resolved threads
@@ -242,6 +252,7 @@ export async function runReviewPipeline(
             pr.repo,
             pr.number,
             Number(tr.thread_id),
+            footer,
           );
         } catch (err) {
           log.warn({ threadId: tr.thread_id, err }, "Failed to post resolved reply");
@@ -258,7 +269,7 @@ export async function runReviewPipeline(
             repo: pr.repo,
             pull_number: pr.number,
             comment_id: Number(tr.thread_id),
-            body: tr.response,
+            body: tr.response + footer,
           });
         } catch (err) {
           log.warn({ threadId: tr.thread_id, err }, "Failed to post thread response");
@@ -268,13 +279,17 @@ export async function runReviewPipeline(
 
     // Post new review comments
     if (merged.comments.length > 0) {
+      const commentsWithFooter = merged.comments.map((c) => ({
+        ...c,
+        body: c.body + footer,
+      }));
       await postReview(
         octokit,
         pr.owner,
         pr.repo,
         pr.number,
-        merged.comments,
-        merged.summary,
+        commentsWithFooter,
+        merged.summary + footer,
       );
     }
 
@@ -285,7 +300,7 @@ export async function runReviewPipeline(
         pr.owner,
         pr.repo,
         pr.number,
-        `## ARCHITECTURE.md Update Needed\n\n${merged.architecture_update_needed.reason ?? "This PR changes the project architecture. Please update ARCHITECTURE.md."}`,
+        `## ARCHITECTURE.md Update Needed\n\n${merged.architecture_update_needed.reason ?? "This PR changes the project architecture. Please update ARCHITECTURE.md."}${footer}`,
       );
     }
 
@@ -304,7 +319,7 @@ export async function runReviewPipeline(
           pr.owner,
           pr.repo,
           pr.number,
-          "LGTM! All review comments have been addressed.",
+          `LGTM! All review comments have been addressed.${footer}`,
         );
       }
       await setLabel(octokit, pr.owner, pr.repo, pr.number, "human-review-needed");

@@ -31,5 +31,6 @@ export const config = {
   POLL_INTERVAL_MS: optionalNumericEnv("POLL_INTERVAL_MS", 60_000),
   REVIEW_TIMEOUT_MS: optionalNumericEnv("REVIEW_TIMEOUT_MS", 600_000),
   WORK_DIR: optionalEnv("WORK_DIR", "/tmp/review-bot"),
+  TRANSCRIPT_DIR: optionalEnv("TRANSCRIPT_DIR", "/tmp/review-bot/transcripts"),
   LOG_LEVEL: optionalEnv("LOG_LEVEL", "info"),
 } as const;

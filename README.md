@@ -58,6 +58,7 @@ All configuration is via environment variables (see `.env.example`):
 | `POLL_INTERVAL_MS` | No | `60000` | Polling interval in milliseconds |
 | `REVIEW_TIMEOUT_MS` | No | `600000` | Timeout per Claude Code invocation |
 | `WORK_DIR` | No | `/tmp/review-bot` | Directory for cloning PR branches |
+| `TRANSCRIPT_DIR` | No | `/tmp/review-bot/transcripts` | Directory for Claude Code transcript logs |
 | `LOG_LEVEL` | No | `info` | Log level (`debug`, `info`, `warn`, `error`) |
 
 ## Debugging with Claude Code

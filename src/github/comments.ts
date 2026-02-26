@@ -6,13 +6,17 @@ export async function postResolvedReply(
   repo: string,
   prNumber: number,
   commentId: number,
+  reviewCycleFooter?: string,
 ): Promise<void> {
+  const body = reviewCycleFooter
+    ? `REVIEW BOT RESOLVED${reviewCycleFooter}`
+    : "REVIEW BOT RESOLVED";
   await octokit.rest.pulls.createReplyForReviewComment({
     owner,
     repo,
     pull_number: prNumber,
     comment_id: commentId,
-    body: "REVIEW BOT RESOLVED",
+    body,
   });
 }
 
