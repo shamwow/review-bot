@@ -42,7 +42,9 @@ export function runClaudeCode(options: RunClaudeCodeOptions): Promise<string> {
       cwd: checkoutPath,
       env: {
         ...process.env,
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+        ...(process.env.ANTHROPIC_API_KEY
+          ? { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY }
+          : {}),
       },
       stdio: ["pipe", "pipe", "pipe"],
     });

@@ -25,7 +25,7 @@ function optionalNumericEnv(name: string, fallback: number): number {
 export const config = {
   GITHUB_TOKEN: requireEnv("GITHUB_TOKEN"),
   GITHUB_ORG: requireEnv("GITHUB_ORG"),
-  ANTHROPIC_API_KEY: requireEnv("ANTHROPIC_API_KEY"),
+  ANTHROPIC_API_KEY: optionalEnv("ANTHROPIC_API_KEY", ""),
 
   CLAUDE_MODEL: optionalEnv("CLAUDE_MODEL", "claude-opus-4-6"),
   MAX_REVIEW_TURNS: optionalNumericEnv("MAX_REVIEW_TURNS", 30),
