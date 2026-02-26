@@ -26,8 +26,6 @@ export async function clonePR(options: ClonePROptions): Promise<string> {
   const cloneUrl = `https://x-access-token:${token}@github.com/${owner}/${repo}.git`;
   await execFileAsync("git", [
     "clone",
-    "--depth",
-    "1",
     "--branch",
     branch,
     cloneUrl,

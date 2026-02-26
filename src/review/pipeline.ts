@@ -185,7 +185,7 @@ export async function runReviewPipeline(
       `Title: ${pr.title}`,
       `Branch: ${pr.branch}`,
       `Use the GitHub MCP tools to read PR comments and threads.`,
-      `Read the diff with: git diff main...HEAD`,
+      `Read the diff with: git diff origin/main...HEAD`,
     ].join("\n");
 
     // 5. Pass 1: Architecture review
