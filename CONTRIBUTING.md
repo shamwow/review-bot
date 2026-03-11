@@ -118,7 +118,7 @@ When the bot applies `bot-changes-needed`, it will have posted review comments o
    - **Fix the issue** in a new commit and reply to the thread explaining the fix, OR
    - **Justify why no change is needed** by replying to the thread with a clear explanation. The review bot will evaluate justifications on the next cycle and resolve threads it finds acceptable.
 
-3. **Do not** post "REVIEW BOT RESOLVED" — only the review bot uses this phrase to mark threads as resolved.
+3. **Do not** add rocket/thumbs-up reactions to bot comments — the review bot uses these reactions to mark threads as resolved.
 
 4. After addressing all threads, **re-apply the `bot-review-needed` label** to trigger another review cycle.
 

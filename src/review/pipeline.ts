@@ -9,7 +9,9 @@ import { clonePR, pruneCheckouts } from "../checkout/repo-manager.js";
 import { setLabel } from "../github/labeler.js";
 import { postReview } from "../github/review-poster.js";
 import {
-  postResolvedReply,
+  addResolvedReactions,
+  addResolvedReactionsToGeneralComment,
+  fetchResolvedThreadIds,
   postGeneralComment,
 } from "../github/comments.js";
 import { makeFooter } from "../shared/footer.js";
@@ -183,10 +185,21 @@ export async function runReviewPipeline(
     const detailPromptPath = buildPromptFile("detailed-pass", detectedPlatform);
     const mcpConfigPath = buildMcpConfig(config.GITHUB_TOKEN);
 
+    // Pre-fetch resolved thread IDs
+    const { data: botUser } = await octokit.rest.users.getAuthenticated();
+    const resolvedThreadIds = await fetchResolvedThreadIds(
+      octokit, pr.owner, pr.repo, pr.number, botUser.login,
+    );
+
+    const resolvedLine = resolvedThreadIds.size > 0
+      ? `Already-resolved thread IDs (skip these): ${[...resolvedThreadIds].join(", ")}`
+      : `No threads are currently marked as resolved.`;
+
     const userMessage = [
       `Review PR #${pr.number} in ${pr.owner}/${pr.repo}.`,
       `Title: ${pr.title}`,
       `Branch: ${pr.branch}`,
+      resolvedLine,
       `Use the GitHub MCP tools to read PR comments and threads.`,
       `Read the diff with: git diff origin/main...HEAD`,
     ].join("\n");
@@ -245,36 +258,34 @@ export async function runReviewPipeline(
     const merged = mergeResults(archResult, detailResult);
 
     // 8. Post results
-    // Post "REVIEW BOT RESOLVED" on resolved threads
+    // Add resolved reactions on resolved threads
     for (const tr of merged.thread_responses) {
       if (tr.resolved) {
-        const footer = makeFooter(randomUUID(), reviewId);
         try {
-          await postResolvedReply(
+          await addResolvedReactions(
             octokit,
             pr.owner,
             pr.repo,
-            pr.number,
             Number(tr.thread_id),
-            footer,
+            "review_comment",
           );
         } catch (err: any) {
           if (err?.status === 404) {
             // Not an inline review comment — fall back to general comment
-            log.info({ threadId: tr.thread_id }, "Inline reply 404, falling back to general comment");
+            log.info({ threadId: tr.thread_id }, "Inline reaction 404, falling back to general comment");
             try {
-              await postGeneralComment(
+              await addResolvedReactionsToGeneralComment(
                 octokit,
                 pr.owner,
                 pr.repo,
                 pr.number,
-                `REVIEW BOT RESOLVED (thread::${tr.thread_id})${footer}`,
+                tr.thread_id,
               );
             } catch (fallbackErr) {
-              log.warn({ threadId: tr.thread_id, err: fallbackErr }, "Failed to post resolved fallback comment");
+              log.warn({ threadId: tr.thread_id, err: fallbackErr }, "Failed to add resolved reactions to general comment");
             }
           } else {
-            log.warn({ threadId: tr.thread_id, err }, "Failed to post resolved reply");
+            log.warn({ threadId: tr.thread_id, err }, "Failed to add resolved reactions");
           }
         }
       }

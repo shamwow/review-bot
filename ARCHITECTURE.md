@@ -135,7 +135,7 @@ The system prompt is composed from layers, tuned per review pass and per platfor
 
 ```
 [Claude Code default prompt]          ← preserved via --append-system-prompt-file
-  + base.md                           ← shared rules: output format, thread handling, "REVIEW BOT RESOLVED" semantics
+  + base.md                           ← shared rules: output format, thread handling, resolved-reactions semantics
   + {pass}-specific instructions      ← architecture-pass.md OR detailed-pass.md
   + {PLATFORM}_CODE_REVIEW.md         ← platform-specific review guide
 ```
@@ -178,7 +178,7 @@ A single `reviewId` (UUID) is generated per pipeline run and shared across both 
 
 ### Thread IDs
 
-Every bot comment (inline review comments, general comments, LGTM, build failure, error, architecture update) includes a `thread::{uuid}` footer tag. This enables resolution tracking for all comment types — not just inline PR review threads. On subsequent reviews, Claude reads these tags to identify and respond to unresolved threads.
+Every bot comment (inline review comments, general comments, LGTM, build failure, error, architecture update) includes a `thread::{uuid}` footer tag. This enables resolution tracking for all comment types — not just inline PR review threads. Resolved threads are marked with emoji reactions (rocket + thumbs-up) instead of text replies. The pipeline pre-fetches resolved thread IDs via the Octokit reactions API and passes them to Claude in the user message, so Claude doesn't need to scan for resolution markers itself.
 
 ### Merging Results
 - Combine architecture + detail comments, deduplicate by file+line proximity
@@ -265,7 +265,7 @@ The pipeline counts distinct `review::{uuid}` values in PR comments to determine
 
 ### Code-fix pass
 
-A single Claude Code session reads all unresolved review comments via GitHub MCP, makes code changes, and outputs JSON with `threads_addressed`, `build_passed`, and `summary`. The prompt (`code-fix.md`) instructs Claude to make minimal, focused changes and not commit/push.
+A single Claude Code session reads all unresolved review comments via GitHub MCP, makes code changes, and outputs JSON with `threads_addressed`, `build_passed`, and `summary`. The pipeline pre-fetches resolved thread IDs and passes them in the user message so Claude can skip already-resolved threads. The prompt (`code-fix.md`) instructs Claude to make minimal, focused changes and not commit/push.
 
 ### Merge conflict resolution
 

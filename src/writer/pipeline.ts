@@ -7,7 +7,7 @@ import { config } from "../config.js";
 import { logger } from "../logger.js";
 import { clonePR, pruneCheckouts } from "../checkout/repo-manager.js";
 import { setLabel } from "../github/labeler.js";
-import { postGeneralComment } from "../github/comments.js";
+import { fetchResolvedThreadIds, postGeneralComment } from "../github/comments.js";
 import { makeFooter } from "../shared/footer.js";
 import { runBuildAndTests } from "../review/build-runner.js";
 import { runClaudeCode } from "../review/claude-code-runner.js";
@@ -243,10 +243,21 @@ export async function runWritePipeline(
     const promptPath = buildPromptFile(detectedPlatform);
     const mcpConfigPath = buildMcpConfig(config.GITHUB_TOKEN);
 
+    // Pre-fetch resolved thread IDs
+    const { data: botUser } = await octokit.rest.users.getAuthenticated();
+    const resolvedThreadIds = await fetchResolvedThreadIds(
+      octokit, pr.owner, pr.repo, pr.number, botUser.login,
+    );
+
+    const resolvedLine = resolvedThreadIds.size > 0
+      ? `Already-resolved thread IDs (skip these): ${[...resolvedThreadIds].join(", ")}`
+      : `No threads are currently marked as resolved.`;
+
     const userMessage = [
       `Fix review comments on PR #${pr.number} in ${pr.owner}/${pr.repo}.`,
       `Title: ${pr.title}`,
       `Branch: ${pr.branch}`,
+      resolvedLine,
       `Use the GitHub MCP tools to read PR review comments and threads.`,
       `Read the diff with: git diff origin/main...HEAD`,
     ].join("\n");

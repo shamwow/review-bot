@@ -21,9 +21,10 @@ After your review, output a single JSON block:
 ```
 
 ## Thread handling rules
-- Use the GitHub MCP tools to list review comments on this PR and identify unresolved threads (those without a "REVIEW BOT RESOLVED" reply)
+- The user message includes a list of already-resolved thread IDs. Threads in that list are resolved — do NOT re-review them.
+- Use the GitHub MCP tools to list review comments on this PR and identify unresolved threads (those NOT in the resolved list)
 - For each unresolved thread, read the full conversation to understand the context
-- If the submitter's justification is valid → set resolved: true (bot will post "REVIEW BOT RESOLVED")
+- If the submitter's justification is valid → set resolved: true (bot will mark it resolved with reactions)
 - If the justification is insufficient → set resolved: false with a clear explanation
 - You MUST respond to every unresolved thread — do not skip any
 
@@ -32,7 +33,7 @@ All bot comments contain a `thread::{uuid}` tag in their footer. When constructi
 - **Inline review comments** (PR review threads): use the GitHub `comment_id` (from MCP) as the `thread_id`
 - **General/non-inline comments** (issue comments posted by the bot): use the UUID from the `thread::` tag in the comment footer as the `thread_id`
 
-You must check both inline review threads AND general bot comments for unresolved threads. A general comment is unresolved if it has no "REVIEW BOT RESOLVED" reply referencing its thread ID.
+You must check both inline review threads AND general bot comments for unresolved threads. Use the resolved thread IDs list from the user message to determine which threads are already resolved.
 
 ## Review approach
 - Read the diff: `git diff main...HEAD`

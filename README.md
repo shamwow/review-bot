@@ -101,7 +101,7 @@ The bot polls GitHub every 60 seconds for open PRs with the `bot-review-needed`,
 1. Clones the PR branch into a temp directory
 2. Runs the project's build and test commands (from `CLAUDE.md` or `README.md`)
 3. If build/tests pass, runs two Claude Code review passes (architecture + detailed)
-4. Posts review comments and swaps labels (`bot-changes-needed` or `human-review-needed`)
+4. Posts review comments, marks resolved threads with emoji reactions (rocket + thumbs-up), and swaps labels (`bot-changes-needed` or `human-review-needed`)
 
 **Write pipeline** (`bot-changes-needed`):
 1. Checks if the review cycle limit has been reached — if so, applies `bot-human-intervention` and stops
@@ -117,6 +117,6 @@ The bot polls GitHub every 60 seconds for open PRs with the `bot-review-needed`,
 4. If CI still pending: does nothing, re-checks next poll cycle (timeout after `CI_POLL_TIMEOUT_MS`)
 5. This creates an autonomous review-fix loop that iterates until the code passes review
 
-Every bot comment includes a `thread::{uuid}` tag in its footer for resolution tracking, plus a `review::{uuid}` tag linking it to the pipeline run that produced it.
+Every bot comment includes a `thread::{uuid}` tag in its footer for tracking, plus a `review::{uuid}` tag linking it to the pipeline run that produced it. Resolution is tracked via emoji reactions (rocket + thumbs-up) on the comment rather than text replies.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for full design details and [CONTRIBUTING.md](CONTRIBUTING.md) for the LLM compatibility guide.
