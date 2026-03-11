@@ -19,14 +19,19 @@ export interface TestFixture {
   clonePath: string;
 }
 
-export async function createTestPR(
-  octokit: Octokit,
-  owner: string,
-  repo: string,
-  token: string,
-  runId: string,
-  testCase?: string,
-): Promise<TestFixture> {
+export interface CreateTestPROptions {
+  octokit: Octokit;
+  owner: string;
+  repo: string;
+  token: string;
+  runId: string;
+  title: string;
+  body: string;
+  testCase?: string;
+}
+
+export async function createTestPR(options: CreateTestPROptions): Promise<TestFixture> {
+  const { octokit, owner, repo, token, runId, title, body, testCase } = options;
   const clonePath = mkdtempSync(join(tmpdir(), "ironsha-integration-"));
   const branch = `integration-test/${runId}`;
   const patchPath = join(__fixturesDir, "ios-review.patch");
@@ -51,28 +56,16 @@ export async function createTestPR(
   );
   execSync(`git push origin ${branch}`, { cwd: clonePath, stdio: "pipe" });
 
+  const sub = `<sub>ironsha integration test · ${testCase ? `<b>${testCase}</b> · ` : ""}${runId}</sub>`;
+
   // Create the PR
   const { data: pr } = await octokit.rest.pulls.create({
     owner,
     repo,
-    title: `[${runId}] Fix date picker layout jump and dynamic header spacing`,
+    title: `[${runId}] ${title}`,
     head: branch,
     base: "main",
-    body: [
-      "## Summary",
-      "- measure the dashboard header height dynamically so the scroll content stays aligned when the header switches states",
-      "- present the graphical date picker in a fixed-height sheet to prevent the header/layout jump",
-      "- add accessibility identifiers for day cells and date picker toolbar buttons to support UI automation",
-      "",
-      "## Testing",
-      "- `build_sim` for scheme `Zenith` on the iPhone 16 simulator: passed",
-      "- `test_sim` for scheme `Zenith`: not available because the scheme is not configured for the test action",
-      "- manual validation on the iPhone 16 simulator:",
-      "  - long-pressed the week strip to open the `Go to Date` sheet",
-      "  - verified the sheet presents cleanly and the header remains stable",
-      "",
-      `<sub>ironsha integration test · ${testCase ? `<b>${testCase}</b> · ` : ""}${runId}</sub>`,
-    ].join("\n"),
+    body: `${body}\n\n${sub}`,
   });
 
   return {

@@ -110,7 +110,18 @@ useEffect(() => {
 
 ---
 
-## 9. Testing
+## 9. Visual Evidence
+
+PRs that change UI must include visual proof in the PR description:
+
+- **Static UI changes** (layout, styling, new pages/components) — require **screenshots** showing before and after.
+- **Interactive changes** (animations, transitions, hover states, user flows) — require **screen recordings** demonstrating the behavior.
+
+If visual evidence is missing for UI changes, flag it as a required addition before the PR can be merged.
+
+---
+
+## 10. Testing
 
 - **React Testing Library** for component tests — test behavior, not implementation.
 - **`userEvent`** over `fireEvent` — more realistic user interaction simulation.
@@ -121,7 +132,7 @@ useEffect(() => {
 
 ---
 
-## 10. Security
+## 11. Security
 
 - **No `dangerouslySetInnerHTML`** without sanitization (use DOMPurify).
 - **XSS prevention:** React escapes by default, but watch for URL injection (`javascript:` protocol), `href` attributes, and SVG injection.
@@ -132,7 +143,7 @@ useEffect(() => {
 
 ---
 
-## 11. Bundle Size
+## 12. Bundle Size
 
 - **Dynamic imports** (`React.lazy`) for routes and heavy components.
 - **Tree-shaking friendly exports:** use named exports. Avoid barrel files (`index.ts` re-exporting everything) for large modules.
@@ -142,7 +153,7 @@ useEffect(() => {
 
 ---
 
-## 12. Routing
+## 13. Routing
 
 - **Code splitting at route level** — each route should be a lazy-loaded chunk.
 - **Route-level error boundaries** to catch errors without crashing the whole app.

@@ -33,6 +33,21 @@ describe("iOS review integration", { timeout: 900_000, skip: !GITHUB_TOKEN }, as
 
   const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
+  const PR_TITLE = "Fix date picker layout jump and dynamic header spacing";
+  const PR_BODY = [
+    "## Summary",
+    "- measure the dashboard header height dynamically so the scroll content stays aligned when the header switches states",
+    "- present the graphical date picker in a fixed-height sheet to prevent the header/layout jump",
+    "- add accessibility identifiers for day cells and date picker toolbar buttons to support UI automation",
+    "",
+    "## Testing",
+    "- `build_sim` for scheme `Zenith` on the iPhone 16 simulator: passed",
+    "- `test_sim` for scheme `Zenith`: not available because the scheme is not configured for the test action",
+    "- manual validation on the iPhone 16 simulator:",
+    "  - long-pressed the week strip to open the `Go to Date` sheet",
+    "  - verified the sheet presents cleanly and the header remains stable",
+  ].join("\n");
+
   // Ensure labels exist once for the suite
   for (const label of BOT_LABELS) {
     await ensureLabelExists(octokit, OWNER, REPO, label);
@@ -51,7 +66,10 @@ describe("iOS review integration", { timeout: 900_000, skip: !GITHUB_TOKEN }, as
   const pollerTest = "poller discovers the PR by title filter";
   it(pollerTest, async () => {
     const runId = `ironsha-t-${randomBytes(6).toString("hex")}`;
-    const fixture = await createTestPR(octokit, OWNER, REPO, GITHUB_TOKEN!, runId, pollerTest);
+    const fixture = await createTestPR({
+      octokit, owner: OWNER, repo: REPO, token: GITHUB_TOKEN!,
+      runId, testCase: pollerTest, title: PR_TITLE, body: PR_BODY,
+    });
     fixtures.push(fixture);
 
     await octokit.rest.issues.addLabels({
@@ -85,10 +103,22 @@ describe("iOS review integration", { timeout: 900_000, skip: !GITHUB_TOKEN }, as
     assert.ok(discovered[0].title.includes(runId));
   });
 
-  const pipelineTest = "full review pipeline posts comments and swaps labels";
-  it(pipelineTest, async () => {
+  const visualEvidenceTest = "review flags missing visual evidence for UI changes";
+  it(visualEvidenceTest, async () => {
     const runId = `ironsha-t-${randomBytes(6).toString("hex")}`;
-    const fixture = await createTestPR(octokit, OWNER, REPO, GITHUB_TOKEN!, runId, pipelineTest);
+    const fixture = await createTestPR({
+      octokit, owner: OWNER, repo: REPO, token: GITHUB_TOKEN!,
+      runId, testCase: visualEvidenceTest,
+      title: PR_TITLE,
+      body: [
+        "## Summary",
+        "- fix the date picker layout jump when opening the sheet",
+        "- adjust header spacing to be dynamic",
+        "",
+        "## Testing",
+        "- built on simulator, looks good",
+      ].join("\n"),
+    });
     fixtures.push(fixture);
 
     await octokit.rest.issues.addLabels({
@@ -104,7 +134,63 @@ describe("iOS review integration", { timeout: 900_000, skip: !GITHUB_TOKEN }, as
       number: fixture.prNumber,
       branch: fixture.branch,
       baseBranch: fixture.baseBranch,
-      title: `[${runId}] Fix date picker layout jump and dynamic header spacing`,
+      title: `[${runId}] ${PR_TITLE}`,
+    };
+
+    await runReviewPipeline(octokit, prInfo);
+
+    // Collect all review text: review comments + general comments
+    const { data: reviews } = await octokit.rest.pulls.listReviews({
+      owner: OWNER,
+      repo: REPO,
+      pull_number: fixture.prNumber,
+    });
+    const { data: reviewComments } = await octokit.rest.pulls.listReviewComments({
+      owner: OWNER,
+      repo: REPO,
+      pull_number: fixture.prNumber,
+    });
+    const { data: issueComments } = await octokit.rest.issues.listComments({
+      owner: OWNER,
+      repo: REPO,
+      issue_number: fixture.prNumber,
+    });
+
+    const allText = [
+      ...reviews.map((r) => r.body ?? ""),
+      ...reviewComments.map((c) => c.body),
+      ...issueComments.map((c) => c.body ?? ""),
+    ].join("\n").toLowerCase();
+
+    assert.ok(
+      allText.includes("screenshot") || allText.includes("screen recording") || allText.includes("visual"),
+      "Review should flag missing visual evidence (screenshots/screen recordings) for UI changes",
+    );
+  });
+
+  const pipelineTest = "full review pipeline posts comments and swaps labels";
+  it(pipelineTest, async () => {
+    const runId = `ironsha-t-${randomBytes(6).toString("hex")}`;
+    const fixture = await createTestPR({
+      octokit, owner: OWNER, repo: REPO, token: GITHUB_TOKEN!,
+      runId, testCase: pipelineTest, title: PR_TITLE, body: PR_BODY,
+    });
+    fixtures.push(fixture);
+
+    await octokit.rest.issues.addLabels({
+      owner: OWNER,
+      repo: REPO,
+      issue_number: fixture.prNumber,
+      labels: ["bot-review-needed"],
+    });
+
+    const prInfo: import("../review/types.js").PRInfo = {
+      owner: fixture.owner,
+      repo: fixture.repo,
+      number: fixture.prNumber,
+      branch: fixture.branch,
+      baseBranch: fixture.baseBranch,
+      title: `[${runId}] ${PR_TITLE}`,
     };
 
     await runReviewPipeline(octokit, prInfo, mockAgent);

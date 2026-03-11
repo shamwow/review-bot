@@ -128,7 +128,18 @@ SwiftUI re-evaluates `body` on every state change.
 
 ---
 
-## 12. Testing
+## 12. Visual Evidence
+
+PRs that change UI must include visual proof in the PR description:
+
+- **Static UI changes** (layout, styling, new screens) — require **screenshots** showing before and after.
+- **Interactive changes** (animations, gestures, transitions, user flows) — require **screen recordings** demonstrating the behavior.
+
+If visual evidence is missing for UI changes, flag it as a required addition before the PR can be merged.
+
+---
+
+## 13. Testing
 
 - **New ViewModels and Services require unit tests** using Swift Testing (`@Test`, `#expect`).
 - **Use `MockAPIClient`** for tests involving networking — never hit real endpoints.
