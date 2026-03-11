@@ -123,8 +123,10 @@ function safeFileSegment(value: string | undefined): string {
 
 export function buildPromptFile(options: BuildPromptFileOptions): string {
   const template = resolvePromptTemplate(options);
-  const promptsDir = import.meta.dirname;
-  const guidesDir = join(import.meta.dirname, "..", "guides");
+  // import.meta.dirname resolves to dist/prompts at runtime; .md files live in src/
+  const srcRoot = join(import.meta.dirname, "..", "..", "src");
+  const promptsDir = join(srcRoot, "prompts");
+  const guidesDir = join(srcRoot, "guides");
 
   const layers = template.promptFiles.map((file) =>
     readFileSync(join(promptsDir, file), "utf-8")

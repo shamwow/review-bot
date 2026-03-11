@@ -1,0 +1,119 @@
+diff --git a/.xcodebuildmcp/config.yaml b/.xcodebuildmcp/config.yaml
+new file mode 100644
+index 0000000..7983276
+--- /dev/null
++++ b/.xcodebuildmcp/config.yaml
+@@ -0,0 +1,2 @@
++schemaVersion: 1
++enabledWorkflows: ["simulator", "ui-automation"]
+diff --git a/Zenith/Utilities/Spacing+Theme.swift b/Zenith/Utilities/Spacing+Theme.swift
+index 57d5a3b..c6ccaeb 100644
+--- a/Zenith/Utilities/Spacing+Theme.swift
++++ b/Zenith/Utilities/Spacing+Theme.swift
+@@ -32,6 +32,8 @@ extension CGFloat {
+     static let progressBarHeight: CGFloat = 14
+     static let calorieCardHeight: CGFloat = 200
+     static let photoPreviewMaxHeight: CGFloat = 300
++    static let datePickerSheetHeight: CGFloat = 460
++    static let dashboardHeaderEstimate: CGFloat = 130
+
+     // MARK: - Input Fields
+
+diff --git a/Zenith/Views/Dashboard/DashboardView.swift b/Zenith/Views/Dashboard/DashboardView.swift
+index fbb2810..2ab7791 100644
+--- a/Zenith/Views/Dashboard/DashboardView.swift
++++ b/Zenith/Views/Dashboard/DashboardView.swift
+@@ -13,6 +13,7 @@ struct DashboardView: View {
+     @State private var isAnimating = false
+     @State private var showCalorieInHeader = false
+     @State private var editingEntry: FoodEntry?
++    @State private var headerHeight: CGFloat = .dashboardHeaderEstimate
+
+     private var selectedEntries: [FoodEntry] {
+         let start = selectedDate.startOfDay
+@@ -123,7 +124,7 @@ struct DashboardView: View {
+                     })
+                     .padding(.horizontal, .paddingMedium)
+                 }
+-                .padding(.top, 130)
++                .padding(.top, headerHeight)
+                 .padding(.bottom, 100)
+             }
+             .offset(x: slideOffset)
+@@ -172,6 +173,13 @@ struct DashboardView: View {
+             .padding(.horizontal, .paddingMedium)
+             .padding(.vertical, .paddingSmall)
+             .background(.ultraThinMaterial)
++            .overlay(
++                GeometryReader { geo in
++                    Color.clear
++                        .onAppear { headerHeight = geo.size.height }
++                        .onChange(of: geo.size.height) { _, newValue in headerHeight = newValue }
++                }
++            )
+         }
+         .background(Color.surfaceBackground)
+         .navigationBarHidden(true)
+@@ -179,14 +187,18 @@ struct DashboardView: View {
+             selectDate(pickerDate)
+         }) {
+             NavigationStack {
+-                DatePicker(
+-                    "Select Date",
+-                    selection: $pickerDate,
+-                    in: ...Date.now,
+-                    displayedComponents: .date
+-                )
+-                .datePickerStyle(.graphical)
+-                .padding(.horizontal)
++                VStack {
++                    DatePicker(
++                        "Select Date",
++                        selection: $pickerDate,
++                        in: ...Date.now,
++                        displayedComponents: .date
++                    )
++                    .datePickerStyle(.graphical)
++                    .padding(.horizontal)
++
++                    Spacer()
++                }
+                 .navigationTitle("Go to Date")
+                 .navigationBarTitleDisplayMode(.inline)
+                 .toolbar {
+@@ -197,6 +209,8 @@ struct DashboardView: View {
+                         } label: {
+                             Text("Today")
+                         }
++                        .accessibilityIdentifier("datePickerToday")
++                        .accessibilityLabel("Today")
+                         .disabled(Calendar.current.isDateInToday(pickerDate))
+                     }
+                     ToolbarItem(placement: .topBarTrailing) {
+@@ -208,11 +222,13 @@ struct DashboardView: View {
+                                 .symbolRenderingMode(.hierarchical)
+                                 .foregroundStyle(.secondary)
+                         }
++                        .accessibilityIdentifier("datePickerClose")
++                        .accessibilityLabel("Close")
+                     }
+                 }
+             }
+             .tint(Color.theme)
+-            .presentationDetents([.medium])
++            .presentationDetents([.height(.datePickerSheetHeight)])
+         }
+         .sheet(item: $editingEntry) { entry in
+             AddEntryView(editingEntry: entry)
+diff --git a/Zenith/Views/Dashboard/WeekStripView.swift b/Zenith/Views/Dashboard/WeekStripView.swift
+index 06b348a..83d32cf 100644
+--- a/Zenith/Views/Dashboard/WeekStripView.swift
++++ b/Zenith/Views/Dashboard/WeekStripView.swift
+@@ -160,6 +160,7 @@ struct WeekStripView: View {
+                 dayColumn(for: day)
+                     .frame(maxWidth: .infinity)
+                     .contentShape(Rectangle())
++                    .accessibilityIdentifier("day_\(day.dayNumber)")
+                     .onTapGesture {
+                         guard !isFuture, !isAnimating else { return }
+                         visualSelection = day

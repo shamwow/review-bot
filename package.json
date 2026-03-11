@@ -7,7 +7,9 @@
     "start": "tsx src/index.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && node --test dist/*.test.js dist/**/*.test.js"
+    "test": "npm run build && node --test dist/*.test.js dist/**/*.test.js",
+    "test:integration": "npm run build && node --test --test-timeout=900000 dist/integration/*.integration.test.js",
+    "test:integration:mock_llm": "npm run build && node --test --test-timeout=900000 dist/integration/*.integration.test.js"
   },
   "dependencies": {
     "@octokit/rest": "^21.1.1",

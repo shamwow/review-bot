@@ -14,7 +14,7 @@ import {
 import { makeFooter } from "../shared/footer.js";
 import { buildPromptFile } from "../prompts/prompt-builder.js";
 import { runBuildAndTests } from "./build-runner.js";
-import { runAgent } from "./agent-runner.js";
+import { runAgent, type AgentRunner } from "./agent-runner.js";
 import { detectPlatform } from "./platform-detector.js";
 import { parseArchitectureResult, parseDetailedResult } from "./result-parser.js";
 import type {
@@ -73,6 +73,7 @@ function mergeResults(
 export async function runReviewPipeline(
   octokit: Octokit,
   pr: PRInfo,
+  agentRunner: AgentRunner = runAgent,
 ): Promise<void> {
   const log = logger.child({
     pr: `${pr.owner}/${pr.repo}#${pr.number}`,
@@ -178,7 +179,7 @@ export async function runReviewPipeline(
 
     // 5. Pass 1: Architecture review
     log.info("Running architecture review pass");
-    const archRaw = await runAgent({
+    const archRaw = await agentRunner({
       provider,
       checkoutPath,
       promptPath: archPromptPath,
@@ -201,7 +202,7 @@ export async function runReviewPipeline(
 
     // 6. Pass 2: Detailed review
     log.info("Running detailed review pass");
-    const detailRaw = await runAgent({
+    const detailRaw = await agentRunner({
       provider,
       checkoutPath,
       promptPath: detailPromptPath,

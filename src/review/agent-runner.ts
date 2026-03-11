@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { config, resolveProviderModel, type AgentProvider } from "../config.js";
 import { logger } from "../logger.js";
 
-interface RunAgentOptions {
+export interface RunAgentOptions {
   provider: AgentProvider;
   checkoutPath: string;
   promptPath: string;
@@ -262,6 +262,8 @@ async function buildInvocationSpec(
     model: resolvedModel,
   });
 }
+
+export type AgentRunner = (options: RunAgentOptions) => Promise<string>;
 
 export async function runAgent(
   options: RunAgentOptions,

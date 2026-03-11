@@ -8,10 +8,11 @@ import type { PRInfo } from "./review/types.js";
 
 const processing = new Set<string>();
 
-async function pollForLabel(
+export async function pollForLabel(
   octokit: Octokit,
   label: string,
   handler: (octokit: Octokit, pr: PRInfo) => Promise<void>,
+  titleFilter?: string,
 ): Promise<void> {
   logger.debug({ label }, "Polling for PRs with label");
 
@@ -34,7 +35,11 @@ async function pollForLabel(
     });
 
     // Filter to only pull requests (issues with pull_request field)
-    const prs = issues.data.filter((issue) => issue.pull_request);
+    let prs = issues.data.filter((issue) => issue.pull_request);
+
+    if (titleFilter) {
+      prs = prs.filter((item) => item.title.includes(titleFilter));
+    }
 
     for (const item of prs) {
       const key = `${repo.owner.login}/${repo.name}#${item.number}`;
