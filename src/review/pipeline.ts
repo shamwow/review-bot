@@ -244,12 +244,17 @@ export async function runReviewPipeline(
     // Add resolved reactions on resolved threads
     for (const tr of merged.thread_responses) {
       if (tr.resolved) {
+        const commentId = Number(tr.thread_id);
+        if (Number.isNaN(commentId)) {
+          log.debug({ threadId: tr.thread_id }, "Skipping reaction — thread_id is not a numeric comment ID");
+          continue;
+        }
         try {
           await addResolvedReactions(
             octokit,
             pr.owner,
             pr.repo,
-            Number(tr.thread_id),
+            commentId,
             "review_comment",
           );
         } catch (err: any) {
@@ -277,13 +282,18 @@ export async function runReviewPipeline(
     // Post feedback on unresolved threads
     for (const tr of merged.thread_responses) {
       if (!tr.resolved && tr.response) {
+        const commentId = Number(tr.thread_id);
+        if (Number.isNaN(commentId)) {
+          log.debug({ threadId: tr.thread_id }, "Skipping reply — thread_id is not a numeric comment ID");
+          continue;
+        }
         const footer = makeFooter(randomUUID(), reviewId);
         try {
           await octokit.rest.pulls.createReplyForReviewComment({
             owner: pr.owner,
             repo: pr.repo,
             pull_number: pr.number,
-            comment_id: Number(tr.thread_id),
+            comment_id: commentId,
             body: tr.response + footer,
           });
         } catch (err) {

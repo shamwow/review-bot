@@ -36,7 +36,11 @@ export async function hasMergeConflicts(
       { cwd: checkoutPath },
     );
     // No conflicts — abort the merge to restore working tree
-    await execFileAsync("git", ["merge", "--abort"], { cwd: checkoutPath });
+    try {
+      await execFileAsync("git", ["merge", "--abort"], { cwd: checkoutPath });
+    } catch {
+      // "Already up to date" merges don't create MERGE_HEAD — nothing to abort
+    }
     return { hasConflicts: false, conflictFiles: [] };
   } catch (err) {
     // Merge failed — likely conflicts. Get the list of conflicted files.
