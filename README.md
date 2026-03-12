@@ -1,6 +1,6 @@
 # ironsha
 
-A webhook-driven daemon that reviews pull requests using either Claude Code or Codex. Supports iOS (SwiftUI), Android (Kotlin/Compose), Go webservers, and React webapps.
+An AI Shahmeer that reviews PRs, writes code to fix review comments, resolves merge conflicts, and iterates until the PR is ready for human review. Will also develop features end-to-end from issue descriptions. Powered by Claude Code or Codex. Supports iOS (SwiftUI), Android (Kotlin/Compose), Go webservers, and React webapps.
 
 ## Prerequisites
 
@@ -30,7 +30,7 @@ A webhook-driven daemon that reviews pull requests using either Claude Code or C
 
 ### 2. Install the App
 
-Install the GitHub App on the repositories (or organization) you want ironsha to review.
+Install the GitHub App on the repositories (or organization) you want ironsha to work on.
 
 ### 3. Configure the environment
 
@@ -115,7 +115,7 @@ ironsha reads those files in that order, extracts build/test commands, and dedup
 
 ## How it works
 
-The bot runs as an HTTP server that receives GitHub webhook events. When a PR is labeled, the matching pipeline is dispatched.
+The bot runs as an HTTP server that receives GitHub webhook events. When a PR is labeled, the matching pipeline is dispatched. The three pipelines form an autonomous loop: review → write code → wait for CI → re-review, repeating until the PR passes or hits the cycle limit.
 
 **Review pipeline** (`bot-review-needed`):
 1. Clone the PR branch into a temp directory.
@@ -126,16 +126,18 @@ The bot runs as an HTTP server that receives GitHub webhook events. When a PR is
 **Write pipeline** (`bot-changes-needed`):
 1. Enforce the review-cycle limit.
 2. Clone the PR branch, fetch base, and resolve merge conflicts through the selected provider.
-3. Run one code-fix pass against unresolved review comments.
+3. Run one code-fix pass — the agent reads unresolved review comments via GitHub MCP and writes code to address them.
 4. Run build/tests as a safety net.
 5. If changes pass, commit, push, post thread replies, and swap to `bot-ci-pending`.
 
 **CI handler** (`bot-ci-pending`):
 1. Check GitHub Check Runs and Commit Statuses.
-2. If CI passes: swap back to `bot-review-needed`.
-3. If CI fails: post failure details and swap to `bot-changes-needed`.
+2. If CI passes: swap back to `bot-review-needed` for another review cycle.
+3. If CI fails: post failure details and swap to `bot-changes-needed` for another fix attempt.
 
-The `check_suite.completed` webhook event replaces CI polling — GitHub notifies ironsha the moment CI finishes.
+The `check_suite.completed` webhook event notifies ironsha the moment CI finishes — no polling needed.
+
+The cycle continues automatically (review → fix → CI → review) until the PR either passes review (label swaps to `human-review-needed`) or hits `MAX_REVIEW_CYCLES` (label swaps to `bot-human-intervention`).
 
 Every bot comment includes a `thread::{uuid}` footer tag, plus a `review::{uuid}` tag that identifies the review cycle which produced it.
 
