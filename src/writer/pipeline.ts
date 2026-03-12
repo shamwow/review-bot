@@ -33,7 +33,6 @@ function countReviewCycles(comments: Array<{ body?: string }>): number {
 export async function runWritePipeline(
   octokit: Octokit,
   pr: PRInfo,
-  opts: { githubToken: string; botLogin: string },
 ): Promise<void> {
   const log = logger.child({
     pr: `${pr.owner}/${pr.repo}#${pr.number}`,
@@ -79,7 +78,7 @@ export async function runWritePipeline(
       repo: pr.repo,
       branch: pr.branch,
       prNumber: pr.number,
-      token: opts.githubToken,
+      token: config.GITHUB_TOKEN,
       workDir: config.WORK_DIR,
     });
     log.info({ checkoutPath }, "Cloned successfully");
@@ -121,7 +120,7 @@ export async function runWritePipeline(
           checkoutPath,
           promptPath: conflictPromptPath,
           userMessage: conflictMessage,
-          githubToken: opts.githubToken,
+          githubToken: config.GITHUB_TOKEN,
           maxTurns: config.MAX_WRITE_TURNS,
           timeoutMs: config.MERGE_CONFLICT_TIMEOUT_MS,
           reviewId: conflictId,
@@ -202,8 +201,9 @@ export async function runWritePipeline(
     });
 
     // Pre-fetch resolved thread IDs
+    const { data: botUser } = await octokit.rest.users.getAuthenticated();
     const resolvedThreadIds = await fetchResolvedThreadIds(
-      octokit, pr.owner, pr.repo, pr.number, opts.botLogin,
+      octokit, pr.owner, pr.repo, pr.number, botUser.login,
     );
 
     const resolvedLine = resolvedThreadIds.size > 0
@@ -228,7 +228,7 @@ export async function runWritePipeline(
       checkoutPath,
       promptPath,
       userMessage,
-      githubToken: opts.githubToken,
+      githubToken: config.GITHUB_TOKEN,
       maxTurns: config.MAX_WRITE_TURNS,
       timeoutMs: config.WRITE_TIMEOUT_MS,
       reviewId: writeId,
@@ -284,7 +284,7 @@ export async function runWritePipeline(
     await commitAndPush(
       checkoutPath,
       commitMsg,
-      opts.githubToken,
+      config.GITHUB_TOKEN,
       pr.owner,
       pr.repo,
     );

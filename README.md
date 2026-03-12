@@ -5,60 +5,41 @@ An AI Shahmeer that reviews PRs, writes code to fix review comments, resolves me
 ## Prerequisites
 
 - Node.js 18+
-- A GitHub App (see [Setup](#setup))
+- A GitHub Personal Access Token with `repo` and `read:org` scopes
 - One provider CLI installed, depending on `LLM_PROVIDER`:
   - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude` on `PATH`)
   - [Codex CLI](https://developers.openai.com/codex/cli) (`codex` on `PATH`)
 
 ## Setup
 
-### 1. Create a GitHub App
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-1. Go to **Settings → Developer settings → GitHub Apps → New GitHub App**
-2. Set the following permissions:
-   - **Repository permissions:**
-     - Pull requests: Read & write
-     - Issues: Read & write
-     - Checks: Read
-     - Contents: Read
-3. Subscribe to these webhook events:
-   - `pull_request`
-   - `check_suite`
-4. Generate a private key and download the `.pem` file
-5. Note your **App ID** from the app settings page
-6. Set a **Webhook secret** (a random string you generate)
+2. Create a `.env` file from the example:
+   ```bash
+   cp .env.example .env
+   ```
 
-### 2. Install the App
+3. Fill in your `.env`:
+   ```bash
+   # Required
+   GITHUB_TOKEN=ghp_your_token_here
 
-Install the GitHub App on the repositories (or organization) you want ironsha to work on.
+   # Provider selection
+   LLM_PROVIDER=claude
 
-### 3. Configure the environment
+   # Claude auth (only needed when LLM_PROVIDER=claude)
+   ANTHROPIC_API_KEY=sk-ant-your_key_here
+   # Or run `claude login` and leave ANTHROPIC_API_KEY unset
 
-```bash
-npm install
-cp .env.example .env
-```
+   # Codex auth (only needed when LLM_PROVIDER=codex)
+   # CODEX_API_KEY=your_openai_key_here
+   # Or run `codex login`
+   ```
 
-Fill in your `.env`:
-```bash
-# Required
-GITHUB_APP_ID=123456
-GITHUB_APP_PRIVATE_KEY=/path/to/private-key.pem
-GITHUB_WEBHOOK_SECRET=your_secret
-
-# Provider selection
-LLM_PROVIDER=claude
-
-# Claude auth (only needed when LLM_PROVIDER=claude)
-ANTHROPIC_API_KEY=sk-ant-your_key_here
-# Or run `claude login` and leave ANTHROPIC_API_KEY unset
-```
-
-### 4. Set the webhook URL
-
-Point your GitHub App's webhook URL to your server (e.g., `https://your-server.com/api/github/webhooks`).
-
-For local development, use [Smee](https://smee.io) — see [Local Development](#local-development).
+The GitHub token must belong to the GitHub account that will post reviews. The bot polls all repos this account owns or collaborates on.
 
 ## Running
 
@@ -76,17 +57,13 @@ npm start
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `GITHUB_APP_ID` | Yes | — | Numeric App ID from GitHub App settings |
-| `GITHUB_APP_PRIVATE_KEY` | Yes | — | PEM string or path to `.pem` file |
-| `GITHUB_WEBHOOK_SECRET` | Yes | — | Shared secret for webhook signature verification |
-| `WEBHOOK_PORT` | No | `3000` | Port for the webhook HTTP server |
-| `SMEE_URL` | No | — | Smee channel URL for local development |
-| `TEST_GITHUB_TOKEN` | No | — | PAT for integration tests only |
+| `GITHUB_TOKEN` | Yes | — | GitHub PAT with `repo` and `read:org` scopes |
 | `LLM_PROVIDER` | No | `claude` | Which agent CLI to run: `claude` or `codex` |
 | `ANTHROPIC_API_KEY` | No | — | Claude auth. Omit if using `claude login` |
 | `CLAUDE_MODEL` | No | `claude-opus-4-6` | Model for Claude runs |
 | `CODEX_MODEL` | No | — | Optional model override for Codex runs |
 | `MAX_REVIEW_TURNS` | No | `30` | Max agentic turns per review pass. Used by Claude; Codex ignores it |
+| `POLL_INTERVAL_MS` | No | `60000` | Polling interval in milliseconds |
 | `REVIEW_TIMEOUT_MS` | No | `600000` | Timeout per review agent invocation |
 | `MAX_WRITE_TURNS` | No | `50` | Max agentic turns per code-fix pass. Used by Claude; Codex ignores it |
 | `WRITE_TIMEOUT_MS` | No | `900000` | Timeout per code-fix agent invocation |
@@ -115,7 +92,7 @@ ironsha reads those files in that order, extracts build/test commands, and dedup
 
 ## How it works
 
-The bot runs as an HTTP server that receives GitHub webhook events. When a PR is labeled, the matching pipeline is dispatched. The three pipelines form an autonomous loop: review → write code → wait for CI → re-review, repeating until the PR passes or hits the cycle limit.
+The bot polls GitHub every 60 seconds for open PRs with the `bot-review-needed`, `bot-changes-needed`, or `bot-ci-pending` label across all repos the token can access.
 
 **Review pipeline** (`bot-review-needed`):
 1. Clone the PR branch into a temp directory.
@@ -132,30 +109,16 @@ The bot runs as an HTTP server that receives GitHub webhook events. When a PR is
 
 **CI handler** (`bot-ci-pending`):
 1. Check GitHub Check Runs and Commit Statuses.
-2. If CI passes: swap back to `bot-review-needed` for another review cycle.
-3. If CI fails: post failure details and swap to `bot-changes-needed` for another fix attempt.
-
-The `check_suite.completed` webhook event notifies ironsha the moment CI finishes — no polling needed.
-
-The cycle continues automatically (review → fix → CI → review) until the PR either passes review (label swaps to `human-review-needed`) or hits `MAX_REVIEW_CYCLES` (label swaps to `bot-human-intervention`).
+2. If CI passes: swap back to `bot-review-needed`.
+3. If CI fails: post failure details and swap to `bot-changes-needed`.
+4. If CI is pending: leave the PR alone until the next poll cycle.
 
 Every bot comment includes a `thread::{uuid}` footer tag, plus a `review::{uuid}` tag that identifies the review cycle which produced it.
 
-## Local Development
+## Development Notes
 
-For local development, use [Smee](https://smee.io) to forward webhooks to your machine:
-
-1. Go to https://smee.io/new and copy the channel URL
-2. Set `SMEE_URL` in your `.env` to the channel URL
-3. Set your GitHub App's webhook URL to the same Smee channel URL
-4. Run `npm run dev` — the Smee proxy starts automatically
-
-The dev server uses `tsx --watch`, so source changes restart the bot automatically.
-
-## Testing
-
-- `npm run test` — compiles the project and runs the Node built-in test suite
-- `npm run test:integration:mock_llm` — integration tests with mock LLM responses
-- `npm run test:integration` — integration tests with real LLM (requires `TEST_GITHUB_TOKEN`)
+- If you are using Claude as the provider, run ironsha outside a Claude Code session. Nested Claude sessions are blocked.
+- `npm run dev` uses `tsx --watch`, so source changes restart the bot automatically.
+- `npm run test` compiles the project and runs the Node built-in test suite against the compiled output.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the detailed design and [CONTRIBUTING.md](CONTRIBUTING.md) for the repository contract expected from submitting agents.
