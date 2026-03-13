@@ -2,8 +2,6 @@ import { Octokit } from "@octokit/rest";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { runReviewPipeline } from "./review/pipeline.js";
-import { runWritePipeline } from "./writer/pipeline.js";
-import { handleCIPending } from "./writer/ci-handler.js";
 import type { PRInfo } from "./review/types.js";
 
 const processing = new Set<string>();
@@ -80,8 +78,6 @@ export async function pollForLabel(
 
 async function pollOnce(octokit: Octokit): Promise<void> {
   await pollForLabel(octokit, "bot-review-needed", runReviewPipeline);
-  await pollForLabel(octokit, "bot-changes-needed", runWritePipeline);
-  await pollForLabel(octokit, "bot-ci-pending", handleCIPending);
 }
 
 let intervalId: ReturnType<typeof setInterval> | null = null;

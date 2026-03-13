@@ -63,15 +63,6 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
       "/tmp/ironsha/transcripts",
       env,
     ),
-    MAX_WRITE_TURNS: optionalNumericEnvFrom("MAX_WRITE_TURNS", 50, env),
-    WRITE_TIMEOUT_MS: optionalNumericEnvFrom("WRITE_TIMEOUT_MS", 900_000, env),
-    MAX_REVIEW_CYCLES: optionalNumericEnvFrom("MAX_REVIEW_CYCLES", 5, env),
-    CI_POLL_TIMEOUT_MS: optionalNumericEnvFrom("CI_POLL_TIMEOUT_MS", 600_000, env),
-    MERGE_CONFLICT_TIMEOUT_MS: optionalNumericEnvFrom(
-      "MERGE_CONFLICT_TIMEOUT_MS",
-      300_000,
-      env,
-    ),
     LOG_LEVEL: optionalEnvFrom("LOG_LEVEL", "info", env),
   } as const;
 }
